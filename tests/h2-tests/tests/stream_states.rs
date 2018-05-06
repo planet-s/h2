@@ -870,6 +870,7 @@ fn rst_while_closing() {
             // Signal the server mock to send RST_FRAME
             let _ = tx.send(());
 
+
             conn
                 // yield once to allow the server mock to be polled
                 // before the conn flushes its buffer
@@ -947,7 +948,7 @@ fn rst_with_buffered_data() {
 }
 
 #[test]
-fn err_with_buffered_data() {
+fn recv_err_with_buffered_data() {
     // Data is buffered in `FramedWrite` and the stream is reset locally before
     // the data is fully flushed. Given that resetting a stream requires
     // clearing all associated state for that stream, this test ensures that the
@@ -960,26 +961,47 @@ fn err_with_buffered_data() {
     // Synchronize the client / server on response
     let (tx, rx) = ::futures::sync::oneshot::channel();
 
+    let body: Bytes = vec![0; 4096].into();
+
     let srv = srv.assert_client_handshake()
         .unwrap()
         .recv_settings()
+
+        // Prevents the client from writing
+        .buffer_bytes(128)
+
+        // Send invalid data
+        .send_bytes(b"\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+
+        // Wait for the crash
+        .wait_for(rx)
+
+        .and_then(|h| {
+            println!("~~~~~~~~~~~~~~~~~ WT KSDJF LSKDJF LKSDFJ LSDKJF SDLFJK ");
+            Ok(h)
+        })
+
+        // Allow the client to write
+        .unbounded_bytes()
+
+        // Receive the header
         .recv_frame(
             frames::headers(1)
                 .request("POST", "https://example.com/")
         )
-        .buffer_bytes(128)
-        .send_frame(frames::headers(1).response(204).eos())
-        // Send invalid data
-        .send_bytes(b"\x00\x00\x00\x00\x00\x00\x00\x00\x00")
-        .wait_for(rx)
-        .unbounded_bytes()
+        // .send_frame(frames::headers(1).response(204).eos())
+        /*
+        */
+        /*
         .recv_frame(
             frames::data(1, vec![0; 16_384]))
+            */
+        .recv_frame(frames::data(1, body.clone()))
+        .recv_frame(frames::go_away(0).protocol_error())
         .close()
         ;
 
-    // A large body
-    let body = vec![0; 2 * frame::DEFAULT_INITIAL_WINDOW_SIZE as usize];
+    // let body = vec![0; 2 * frame::DEFAULT_INITIAL_WINDOW_SIZE as usize];
 
     let client = client::handshake(io)
         .then(|res| {
@@ -996,18 +1018,44 @@ fn err_with_buffered_data() {
                 .expect("send_request");
 
             // Send the data
-            stream.send_data(body.into(), true).unwrap();
+            stream.send_data(body.clone(), false).unwrap();
+            stream.send_data(body.clone(), true).unwrap();
 
-            conn.join(resp)
+            resp.then(move |res| {
+                assert!(res.is_err());
+                Ok(())
+            })
+            .join(conn.then(|res| {
+                assert!(res.is_err());
+                Ok(())
+            }))
+
+            /*
+            conn.drive({
+                resp.then(|res| {
+                    assert!(res.is_err());
+                    Ok::<_, ()>(())
+                })
+            })
+            */
+        })
+    /*
+        .then(move |res| {
+            let (conn, _) = res.unwrap();
+            tx.send(()).unwrap();
+            conn
         })
         .then(move |res| {
+            println!("~~~~~~~ DONE ~~~~~~~~`");
             assert!(res.is_err());
-            tx.send(()).unwrap();
             Ok(())
-        });
+        })
+        */
+        ;
 
 
     client.join(srv).wait().expect("wait");
+                tx.send(()).unwrap();
 }
 
 #[test]

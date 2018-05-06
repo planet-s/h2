@@ -115,6 +115,7 @@ impl GoAway {
         T: AsyncWrite,
         B: Buf,
     {
+        trace!("GoAway::send_pending_go_away");
         if let Some(frame) = self.pending.take() {
             if !dst.poll_ready()?.is_ready() {
                 self.pending = Some(frame);

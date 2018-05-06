@@ -560,9 +560,7 @@ pub trait HandleFutureExt {
                     let mut inner = handle.as_mut().unwrap()
                         .codec.get_mut().inner.lock().unwrap();
 
-                    if inner.tx_rem == 0 {
-                        inner.tx_rem = usize::MAX;
-                    } else {
+                    if inner.tx_rem > 0 {
                         inner.tx_task = Some(task::current());
                         return Ok(Async::NotReady);
                     }

@@ -104,6 +104,10 @@ where
         }
     }
 
+    pub fn has_streams(&self) -> bool {
+        self.streams.has_streams()
+    }
+
     pub fn set_target_window_size(&mut self, size: WindowSize) {
         self.streams.set_target_connection_window_size(size);
     }
@@ -184,6 +188,8 @@ where
         use codec::RecvError::*;
 
         loop {
+            trace!("Connection::poll -- state={:?}", self.state);
+
             // TODO: probably clean up this glob of code
             match self.state {
                 // When open, continue to poll a frame
@@ -193,10 +199,15 @@ where
                         Ok(Async::Ready(())) => return self.take_error(Reason::NO_ERROR),
                         // The connection is not ready to make progress
                         Ok(Async::NotReady) => {
+                            trace!("Connection::poll2 -- read not ready");
                             // Ensure all window updates have been sent.
                             //
                             // This will also handle flushing `self.codec`
-                            try_ready!(self.streams.poll_complete(&mut self.codec));
+                            let res = self.streams.poll_complete(&mut self.codec);
+                            trace!("self.streams.poll_complete() -> {:?}", res);
+                            try_ready!(res);
+
+                            trace!("Connection::poll2 -- poll_complete done");
 
                             if self.error.is_some() || self.go_away.should_close_on_idle() {
                                 if self.streams.num_active_streams() == 0 {
@@ -281,6 +292,7 @@ where
             // - If it has, we've also added a PING to be sent in poll_ready
             if let Some(reason) = try_ready!(self.poll_go_away()) {
                 if self.go_away.should_close_now() {
+                    debug!("Connection::poll2 -- should_close_now");
                     return Err(RecvError::Connection(reason));
                 }
                 // Only NO_ERROR should be waiting for idle

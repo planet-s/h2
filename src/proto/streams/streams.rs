@@ -515,12 +515,15 @@ where
         let mut send_buffer = self.send_buffer.inner.lock().unwrap();
         let send_buffer = &mut *send_buffer;
 
+        trace!("me.actions.recv.poll_complete");
+
         // Send WINDOW_UPDATE frames first
         //
         // TODO: It would probably be better to interleave updates w/ data
         // frames.
         try_ready!(me.actions.recv.poll_complete(&mut me.store, dst));
 
+        trace!("me.actions.send.poll_complete");
         // Send any other pending frames
         try_ready!(me.actions.send.poll_complete(
             send_buffer,
@@ -708,6 +711,11 @@ where
     pub fn num_active_streams(&self) -> usize {
         let me = self.inner.lock().unwrap();
         me.store.num_active_streams()
+    }
+
+    pub fn has_streams(&self) -> bool {
+        let me = self.inner.lock().unwrap();
+        me.counts.has_streams()
     }
 
     pub fn has_streams_or_other_references(&self) -> bool {

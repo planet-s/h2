@@ -71,15 +71,18 @@ where
     /// Calling this function may result in the current contents of the buffer
     /// to be flushed to `T`.
     pub fn poll_ready(&mut self) -> Poll<(), io::Error> {
+        trace!("Framed::write::poll_ready; has_capacity={:?}", self.has_capacity());
         if !self.has_capacity() {
             // Try flushing
             self.flush()?;
 
             if !self.has_capacity() {
+                trace!("Framed::write::poll_ready; NOT READY");
                 return Ok(Async::NotReady);
             }
         }
 
+        trace!("Framed::write::poll_ready; ready");
         Ok(Async::Ready(()))
     }
 
@@ -172,12 +175,14 @@ where
             while !self.is_empty() {
                 match self.next {
                     Some(Next::Data(ref mut frame)) => {
-                        trace!("  -> queued data frame");
                         let mut buf = Buf::by_ref(&mut self.buf).chain(frame.payload_mut());
-                        try_ready!(self.inner.write_buf(&mut buf));
+                        trace!("  -> queued data frame; remaining={}", buf.remaining());
+                        let res = self.inner.write_buf(&mut buf);
+                        trace!("    -> res={:?}", res);
+                        try_ready!(res);
                     },
                     _ => {
-                        trace!("  -> not a queued data frame");
+                        trace!("  -> not a queued data frame; remaining={}", self.buf.remaining());
                         try_ready!(self.inner.write_buf(&mut self.buf));
                     },
                 }

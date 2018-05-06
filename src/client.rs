@@ -1222,6 +1222,11 @@ where
         }
     }
 
+    /// XXX: Docs
+    pub fn has_streams(&self) -> bool {
+        self.inner.has_streams()
+    }
+
     /// Sets the target window size for the whole connection.
     ///
     /// If `size` is greater than the current value, then a `WINDOW_UPDATE`
@@ -1255,7 +1260,16 @@ where
 
     fn poll(&mut self) -> Poll<(), ::Error> {
         self.inner.maybe_close_connection_if_no_streams();
-        self.inner.poll().map_err(Into::into)
+        let res = self.inner.poll().map_err(Into::into);
+
+        match res {
+            Ok(Async::NotReady) => {}
+            _ => {
+                assert!(!self.inner.has_streams());
+            }
+        }
+
+        res
     }
 }
 

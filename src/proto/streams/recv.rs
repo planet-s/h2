@@ -742,11 +742,17 @@ impl Recv {
         T: AsyncWrite,
         B: Buf,
     {
+        trace!("Recv::poll_complete; send_connection_window_update");
+
         // Send any pending connection level window updates
         try_ready!(self.send_connection_window_update(dst));
 
+        trace!("Recv::poll_complete; send_stream_window_updates");
+
         // Send any pending stream level window updates
         try_ready!(self.send_stream_window_updates(store, dst));
+
+        trace!("Recv::poll_complete -> Ready");
 
         Ok(().into())
     }
